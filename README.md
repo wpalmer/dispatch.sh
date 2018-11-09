@@ -18,8 +18,9 @@ results in the execution of `task_bar.sh`
 
 TODO:
 
+ - `dispatch --prefix=task_ foo bar`, should try to call `task_foo.sh bar` prior to trying `task_foo_bar.sh`
+ - a stack of command prefixes so that `task_foo.sh` can call `task_foo_bar.sh` by saying `dispatch bar` or `task_bar.sh` by saying `dispatch /bar`
  - specify a prefix to be used for environment variables so that unrelated `dispatch` tasks do not conflict with each-other
- - a stack of command prefixes so that `task_bar.sh` can call `task_bar_foo.sh` by saying `dispatch foo` or `task_baz.sh` by saying `dispatch /baz`
  - a configuration interface other than environment variables
  - more-intelligent handling of being included by another script
  - an interface which can be exposed to programming languages so you don't need to use bash to know about `dispatch`
