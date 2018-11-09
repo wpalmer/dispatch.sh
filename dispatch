@@ -15,6 +15,7 @@ _dispatch_temp(){
 		return 1
 	fi
 
+	export DISPATCH_TEMP
 	_dispatch_cleanup(){ rm -rf "$DISPATCH_TEMP"; }
 	trap _dispatch_cleanup EXIT
 }
@@ -35,6 +36,7 @@ dispatch(){
 	local path_owndir="${DISPATCH_OWNDIR:-$dispatch_base}"
 	local path_before="${DISPATCH_PATH_BEFORE}"
 	local path_after="${DISPATCH_PATH_AFTER}"
+	local mktemp=0
 	while [[ $# -gt 0 ]]; do
 		arg="$1"; shift
 		case "$arg" in
@@ -42,6 +44,9 @@ dispatch(){
 				prefix="${arg#*=}_"
 				DISPATCH_PREFIX="${prefix}"
 				export DISPATCH_PREFIX
+			;;
+			--tempdir)
+				mktemp=1
 			;;
 			--path-skip-owndir)
 				path_owndir=
@@ -63,6 +68,9 @@ dispatch(){
 			*)
 				cmd="${prefix}${arg}"
 				if [[ "$(type -t "$cmd")" = "function" ]]; then
+					if [[ $mktemp -eq 1 ]]; then
+						_dispatch_temp
+					fi
 					"$cmd" "$@"
 					return "$?"
 				fi
@@ -106,6 +114,9 @@ dispatch(){
 				done
 
 				if [[ -n "$fullcmd" ]] && [[ -x "$fullcmd" ]]; then
+					if [[ $mktemp -eq 1 ]]; then
+						_dispatch_temp
+					fi
 					command "$fullcmd" "$@"
 					return "$?"
 				fi
