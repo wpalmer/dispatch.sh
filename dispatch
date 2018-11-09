@@ -1,0 +1,123 @@
+#!/bin/bash
+DISPATCH_TEMP=
+_dispatch_temp(){
+	if [[ -n "$DISPATCH_TEMP" ]]; then
+		printf '%s\n' "$DISPATCH_TEMP"
+		return 0
+	fi
+
+	DISPATCH_TEMP="$(mktemp -d 'dispatch.XXXXXXXXXX')"
+	if [[ -z "$DISPATCH_TEMP" ]] ||
+	   [[ ! -d "$DISPATCH_TEMP" ]] ||
+	   [[ ! -w "$DISPATCH_TEMP" ]]
+	then
+		printf '%s\n' 'failed to create temporary directory' >&2
+		return 1
+	fi
+
+	_dispatch_cleanup(){ rm -rf "$DISPATCH_TEMP"; }
+	trap _dispatch_cleanup EXIT
+}
+
+dispatch_base="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")")"
+
+dispatch(){
+	local args=( )
+	local arg=
+
+	local prefix="${DISPATCH_PREFIX}"
+	local suffix=
+	local cmd=
+	local cmd_t=
+	local cmd_list=( )
+	local fullcmd=
+	local path_t=
+	local path_owndir="${DISPATCH_OWNDIR:-$dispatch_base}"
+	local path_before="${DISPATCH_PATH_BEFORE}"
+	local path_after="${DISPATCH_PATH_AFTER}"
+	while [[ $# -gt 0 ]]; do
+		arg="$1"; shift
+		case "$arg" in
+			--prefix=*)
+				prefix="${arg#*=}_"
+				DISPATCH_PREFIX="${prefix}"
+				export DISPATCH_PREFIX
+			;;
+			--path-skip-owndir)
+				path_owndir=
+			;;
+			--path-before=*)
+				path_before="${arg#*=}"
+				DISPATCH_PATH_BEFORE=
+				export DISPATCH_PATH_BEFORE
+			;;
+			--path-after=*)
+				path_after="${arg#*=}"
+				DISPATCH_PATH_AFTER=
+				export DISPATCH_PATH_AFTER
+			;;
+			-*)
+				printf "Unknown argument to 'dispatch': %s\n" "$arg" >&2
+				return 1
+			;;
+			*)
+				cmd="${prefix}${arg}"
+				if [[ "$(type -t "$cmd")" = "function" ]]; then
+					"$cmd" "$@"
+					return "$?"
+				fi
+
+				dispatch_PATH="$PATH"
+				if [[ -n "$path_owndir" ]]; then
+					if [[ -n "$dispatch_PATH" ]]; then
+						dispatch_PATH=":${dispatch_PATH}"
+					fi
+					dispatch_PATH="${path_owndir}${dispatch_PATH}"
+				fi
+
+				if [[ -n "$path_before" ]]; then
+					if [[ -n "$dispatch_PATH" ]]; then
+						dispatch_PATH=":${dispatch_PATH}"
+					fi
+					dispatch_PATH="${path_before}${dispatch_PATH}"
+				fi
+
+				if [[ -n "$path_after" ]]; then
+					if [[ -n "$dispatch_PATH" ]]; then
+						dispatch_PATH="${dispatch_PATH}:"
+					fi
+					dispatch_PATH="${dispatch_PATH}${path_after}"
+				fi
+
+				cmd_t="$cmd"
+				cmd_list=( "$cmd" )
+				while [[ "$cmd_t" != "${cmd_t/_/\/}" ]]; do
+					cmd_t="${cmd_t/_/\/}"
+					cmd_list=( "${cmd_list[@]}" "$cmd_t" )
+				done
+
+				for cmd_t in "${cmd_list[@]}"; do
+					for suffix in '' .sh .pl .py .rb; do
+						fullcmd="$(PATH="${dispatch_PATH}" command which "$cmd_t$suffix" 2>&- || true)"
+						if [[ -n "$fullcmd" ]] && [[ -x "$fullcmd" ]]; then
+							break 2
+						fi
+					done
+				done
+
+				if [[ -n "$fullcmd" ]] && [[ -x "$fullcmd" ]]; then
+					command "$fullcmd" "$@"
+					return "$?"
+				fi
+
+				printf "Unknown dispatch task: %s (%s)\n" "$arg" "$cmd" >&2
+				return 1
+			;;
+		esac
+	done
+
+	printf 'Nothing to dispatch\n' >&2
+	return 1
+}
+
+dispatch "$@"
